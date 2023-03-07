@@ -3,7 +3,7 @@
 
 <div align="center">    
  
-# Rover - Behavior Cloning :arrows_clockwise: with Rovers :red_car:
+# Behavior Cloning :arrows_clockwise: with Rovers :red_car:
 
 ## Purpose & Objectives
 We’re going to attempt to teach a robotic rover how to use a line as a guide for driving around a race track.  This problem will be solved using a single sensor – a simple RGB camera.  All of the control will be derived from a single image, a single frame from streamed video that represents a snapshot in time. This poses both a challenge and a great opportunity for applied machine learning.  As discussed, we will approach this problem by applying a technique called behavioral cloning – a subset under a larger group of techniques called imitation learning (IL). 
