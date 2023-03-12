@@ -35,12 +35,41 @@ def connect_device(s_connection, b=115200, num_attempts=10):
 
     return device
 
+def arm_device(device):
+    while not device.is_armable:
+        print("Switching device to armable...")
+        time.sleep(2)
+        # "GUIDED" mode sets drone to listen
+        # for our commands that tell it what to do...
+    while device.mode != "GUIDED":
+        print("Switching to GUIDED mode...")
+        device.mode = VehicleMode("GUIDED")
+        time.sleep(2)
+    while not device.armed:
+        print("Waiting for arm...")
+        time.sleep(2)
+        device.armed = True
+
 
 def create_rand_coord():
-    return [ random.randint(0, 100), random.randint(0, 100), random.randint(0, 100)]
+    return [random.randint(0, 100), random.randint(0, 100), random.randint(0, 100)]
 
 
-def record(pipeline, config):
+def get_rover_data(device):
+    grd_spd= device.groundspeed
+    vel = device.device.velocity
+    ster = device.channels[1]
+    thr = device.channels[3]
+
+    print(f"Ground speed:{grd_spd}")
+    print(f"Velocity: {vel}")
+    print(f"Steering rc: {ster}")
+    print(f"Throttle rc: {thr}")
+
+    return [grd_spd, vel, ster, thr]
+
+
+def record(pipeline, config, device):
     pause = False
     i = 0
     last_frm_idx = -1
@@ -79,7 +108,7 @@ def record(pipeline, config):
                 cur_frm_idx = int(bgr_frame.frame_number)
                 last_frm_idx = cur_frm_idx
 
-                tele = create_rand_coord()
+                tele = get_rover_data(device)
 
                 tele_data[cur_frm_idx] = tele
 
@@ -103,11 +132,11 @@ def record(pipeline, config):
 
 
 def main():
-    p = rs.pipeline()
-    conf = rs.config()
-    # dev = connect_device("127.0.0.1:14550")
-    record(p, conf)
-
+    pipeline = rs.pipeline()
+    configuration = rs.config()
+    rover = connect_device("127.0.0.1:14550")
+    arm_device(rover)
+    record(pipeline, configuration, rover)
 
 if __name__ == "__main__":
     # execute only if run as a script
