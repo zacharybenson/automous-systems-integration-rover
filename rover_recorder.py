@@ -1,3 +1,4 @@
+import csv
 import pickle
 
 from scipy import rand
@@ -57,7 +58,7 @@ def create_rand_coord():
 
 def get_rover_data(device):
     grd_spd= device.groundspeed
-    vel = device.device.velocity
+    vel = device.velocity
     ster = device.channels[1]
     thr = device.channels[3]
 
@@ -66,7 +67,7 @@ def get_rover_data(device):
     print(f"Steering rc: {ster}")
     print(f"Throttle rc: {thr}")
 
-    return [grd_spd, vel, ster, thr]
+    return [grd_spd, *vel, ster, thr]
 
 
 def record(pipeline, config, device):
@@ -74,7 +75,7 @@ def record(pipeline, config, device):
     i = 0
     last_frm_idx = -1
 
-    session__id = str(datetime.datetime.now().strftime('%Y_%m_%d'))
+    session__id = str(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M'))
 
     try:
 
@@ -84,8 +85,8 @@ def record(pipeline, config, device):
 
         config.enable_record_to_file(f"{bag_name}")
 
-        tele_name = '/media/usafa/data/tele_data_' + session__id + '.pkl'
-        tele_data = {}
+        tele_name = '/media/usafa/data/tele_data_' + session__id + '.csv'
+        tele_data =  []
 
         logging.info("Configuring depth stream.")
         config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
@@ -100,7 +101,7 @@ def record(pipeline, config, device):
 
         while True:
 
-            if not pause:
+            if device.armed:
                 frames = pipeline.wait_for_frames()
                 bgr_frame = frames.get_color_frame()
                 depth_frame = frames.get_depth_frame()
@@ -110,12 +111,19 @@ def record(pipeline, config, device):
 
                 tele = get_rover_data(device)
 
-                tele_data[cur_frm_idx] = tele
+                # tele_data[cur_frm_idx] = tele
+                tele.insert(0,cur_frm_idx)
+
+                # tele_data.concatenate(tele)
+                tele_data.append( tele)
 
                 print(tele_data)
 
                 if not bgr_frame or depth_frame:
                     continue
+            else:
+                quit_program = True
+                break
 
             key = cv2.waitKey(1) & 0xFF
 
@@ -125,10 +133,11 @@ def record(pipeline, config, device):
 
     finally:
         pipeline.stop()
-        with open(tele_name, 'wb') as fp:
-            pickle.dump(tele_data, fp)
-            print('dictionary saved successfully to file')
-            # np.save(f, tele_data)
+        # with open(tele_name, 'wb') as fp:
+        #     pickle.dump(tele_data, fp)
+        #     print('dictionary saved successfully to file')
+        tele_data = np.array(tele_data)
+        tele_data.tofile(tele_name, sep=',')
 
 
 def main():
@@ -137,6 +146,7 @@ def main():
     rover = connect_device("127.0.0.1:14550")
     arm_device(rover)
     record(pipeline, configuration, rover)
+
 
 if __name__ == "__main__":
     # execute only if run as a script
