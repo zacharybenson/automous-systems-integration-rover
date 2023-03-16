@@ -14,7 +14,7 @@ session__id = str(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M'))
 BAGFILENAME = 'data_ ' + session__id
 NPFILENAME = 'tele_data_' + session__id
 ROOT_DIR = '/media/usafa/data'
-BAGFILE = ROOT_DIR + '/' + BAGFILENAME + '.bag'
+BAGFILE = ROOT_DIR + '/*.bag'
 PFILE = ROOT_DIR + '/' + NPFILENAME + '.csv'
 
 
@@ -224,6 +224,10 @@ def process_bag_file(path, dest_folder=None, skip_if_exists=False):
 
 
 def main():
+    
+    
+    
+    
     for filename in os.listdir(ROOT_DIR):
         if filename.endswith(".bag"):
             process_bag_file(BAGFILE)
