@@ -1,4 +1,6 @@
-import csv
+import pickle
+
+from scipy import rand
 
 from utilities.realsense_imu import initialize_camera
 from SITL_Test import connect_device
@@ -8,16 +10,13 @@ import keyboard
 import pyrealsense2.pyrealsense2 as rs
 import numpy as np
 import cv2
-from dronekit import connect, VehicleMode, LocationGlobalRelative, Vehicle
+from dronekit import connect, VehicleMode, LocationGlobalRelative
 import time
 import logging
 import random
 
-rover = None
-rov_steering_val = None
-rov_throttle_val = None
 
-def connect_device(s_connection, b=57600, num_attempts=10):
+def connect_device(s_connection, b=115200, num_attempts=10):
     print("Connecting to device...")
     device = None
     attempts = 1
@@ -36,29 +35,17 @@ def connect_device(s_connection, b=57600, num_attempts=10):
 
     return device
 
-def get_rover_data(device):
-    ster = rov_steering_val
-    thr = rov_throttle_val
 
-    grd_spd= device.groundspeed
-    vel = device.velocity
+def create_rand_coord():
+    return [ random.randint(0, 100), random.randint(0, 100), random.randint(0, 100)]
 
 
-    print(f"Ground speed:{grd_spd}")
-    print(f"Velocity: {vel}")
-    print(f"Steering rc: {ster}")
-    print(f"Throttle rc: {thr}")
-
-    return [grd_spd, *vel, ster, thr]
-
-
-def record(pipeline, config, device):
+def record(pipeline, config):
     pause = False
     i = 0
     last_frm_idx = -1
 
-    session__id = str(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M'))
-    print("Recording for session id " + session__id)
+    session__id = str(datetime.datetime.now().strftime('%Y_%m_%d'))
 
     try:
 
@@ -68,8 +55,8 @@ def record(pipeline, config, device):
 
         config.enable_record_to_file(f"{bag_name}")
 
-        tele_name = '/media/usafa/data/tele_data_' + session__id + '.csv'
-        tele_data =  []
+        tele_name = '/media/usafa/data/tele_data_' + session__id + '.pkl'
+        tele_data = {}
 
         logging.info("Configuring depth stream.")
         config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
@@ -84,7 +71,7 @@ def record(pipeline, config, device):
 
         while True:
 
-            if device.armed:
+            if not pause:
                 frames = pipeline.wait_for_frames()
                 bgr_frame = frames.get_color_frame()
                 depth_frame = frames.get_depth_frame()
@@ -92,52 +79,34 @@ def record(pipeline, config, device):
                 cur_frm_idx = int(bgr_frame.frame_number)
                 last_frm_idx = cur_frm_idx
 
-                tele = get_rover_data(device)
+                tele = create_rand_coord()
 
-                # tele_data[cur_frm_idx] = tele
-                tele.insert(0,cur_frm_idx)
+                tele_data[cur_frm_idx] = tele
 
-                # tele_data.concatenate(tele)
-                tele_data.append( tele)
-
-                # print(tele_data)
+                print(tele_data)
 
                 if not bgr_frame or depth_frame:
                     continue
 
+            key = cv2.waitKey(1) & 0xFF
+
+            if key == ord("q"):  # Quit program
+                quit_program = True
+                break
 
     finally:
         pipeline.stop()
-        tele_data = np.array(tele_data)
-        tele_data.tofile(tele_name, sep=',')
-        print("Finished Recording for " + session__id)
-
+        with open(tele_name, 'wb') as fp:
+            pickle.dump(tele_data, fp)
+            print('dictionary saved successfully to file')
+            # np.save(f, tele_data)
 
 
 def main():
-    while True:
-        pipeline = rs.pipeline()
-        configuration = rs.config()
-        rover = connect_device("/dev/ttyACM0", b=115200)
-        print("Arm Device via radio controller.")
-
-        # dronkit has bugs that can pop up with newer rover firmware.
-        # One of these bus is returning None for channel values!
-        # This hack sets up a callback that dronekit calls into when it has new
-        # channel values to relay.  We will grab the values and store globally.
-        @rover.on_message('RC_CHANNELS')
-        def channels_callback(self, name, message):
-            global rov_steering_val, rov_throttle_val
-            rov_steering_val = message.chan1_raw
-            rov_throttle_val = message.chan3_raw
-
-        while not rover.armed:
-            time.sleep(1)
-
-        print("Rover Armed... Recording Starting.")
-        record(pipeline, configuration, rover)
-
-
+    p = rs.pipeline()
+    conf = rs.config()
+    # dev = connect_device("127.0.0.1:14550")
+    record(p, conf)
 
 
 if __name__ == "__main__":

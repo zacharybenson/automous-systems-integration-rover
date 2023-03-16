@@ -8,14 +8,14 @@ import glob
 from imutils.video import FPS
 import pyrealsense2.pyrealsense2 as rs
 import numpy as np
-# 10.1.100.236 accer
 
-session__id = str(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M'))
+
+session__id = str(datetime.datetime.now().strftime('%Y_%m_%d'))
 BAGFILENAME = 'data_ ' + session__id
 NPFILENAME = 'tele_data_' + session__id
 ROOT_DIR = '/media/usafa/data'
-BAGFILE = ROOT_DIR + '/*.bag'
-PFILE = ROOT_DIR + '/' + NPFILENAME + '.csv'
+BAGFILE = ROOT_DIR + '/' + BAGFILENAME + '.bag'
+PFILE = ROOT_DIR + '/' + NPFILENAME + '.pkl'
 
 
 def load_telem_file(path):
@@ -25,7 +25,8 @@ def load_telem_file(path):
 
     # Load data from the data file (comma delimited), and
     # hold it in a structure for quick lookup (maybe a dictionary).
-    tele = np.genfromtxt('path', delimiter=',')
+    with open(PFILE, 'rb') as fp:
+        tele = pickle.load(fp)
 
     return tele
 
@@ -65,6 +66,7 @@ def process_bag_file(path, dest_folder=None, skip_if_exists=False):
         i = 0
         file_name = os.path.basename(path.replace(".bag", ""))
         print(f"Processing {file_name}...")
+        # path to file should look something like this: /media/usafa/drone_data/20210122-120614.bag
 
         if dest_folder is None:
             dest_path = os.path.join(ROOT_DIR, file_name)
@@ -162,8 +164,8 @@ def process_bag_file(path, dest_folder=None, skip_if_exists=False):
                 i += 1
 
                 # show the output frame for sanity check
-                # cv2.imshow("White Out!", white_range)
-                # cv2.imshow("Color Processed", color_frame)
+                cv2.imshow("White Out!", white_range)
+                cv2.imshow("Color Processed", color_frame)
                 #cv2.imshow("Depth processed", depth_frame)
                 # Write out our various frames
                 # with data as part of the file name...
@@ -224,13 +226,9 @@ def process_bag_file(path, dest_folder=None, skip_if_exists=False):
 
 
 def main():
-    
-    
-    
-    
     for filename in os.listdir(ROOT_DIR):
         if filename.endswith(".bag"):
-            process_bag_file(filename)
+            process_bag_file(BAGFILE)
         else:
             continue
 
