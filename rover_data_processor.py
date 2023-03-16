@@ -230,7 +230,7 @@ def main():
     
     for filename in os.listdir(ROOT_DIR):
         if filename.endswith(".bag"):
-            process_bag_file(BAGFILE)
+            process_bag_file(filename)
         else:
             continue
 
