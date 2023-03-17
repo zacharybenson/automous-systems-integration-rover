@@ -1,5 +1,5 @@
 #! /bin/bash
 
 # move data from data file to hard drive
-echo mv /home/usafa/data/* #put hardrive here
-mv /home/usafa/data/* #put hardrive here
+echo mv /home/usafa/data/* /media/usafa/external_data/Benson
+mv /home/usafa/data/* /media/usafa/external_data/Benson
