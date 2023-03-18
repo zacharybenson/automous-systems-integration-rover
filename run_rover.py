@@ -17,7 +17,8 @@ rover = None
 rov_steering_val = None
 rov_throttle_val = None
 
-def connect_device(s_connection, b=57600, num_attempts=10):
+
+def connect_device(s_connection, b=115200, num_attempts=10):
     print("Connecting to device...")
     device = None
     attempts = 1
@@ -36,13 +37,12 @@ def connect_device(s_connection, b=57600, num_attempts=10):
 
     return device
 
+
 def get_rover_data(device):
     ster = rov_steering_val
     thr = rov_throttle_val
-
-    grd_spd= device.groundspeed
+    grd_spd = device.groundspeed
     vel = device.velocity
-
 
     print(f"Ground speed:{grd_spd}")
     print(f"Velocity: {vel}")
@@ -64,7 +64,7 @@ def record(pipeline, config, device):
 
         logging.info("Establishing Session ID:" + session__id)
 
-        bag_name = '/media/usafa/data/data_ ' + session__id + '.bag'
+        bag_name = '/media/usafa/data/data_' + session__id + '.bag'
 
         config.enable_record_to_file(f"{bag_name}")
 
@@ -82,32 +82,23 @@ def record(pipeline, config, device):
 
         logging.info("Recording realsense sensor stream..")
 
-        while True:
+        if device.armed:
+            frames = pipeline.wait_for_frames()
+            bgr_frame = frames.get_color_frame()
+            depth_frame = frames.get_depth_frame()
 
-            if device.armed:
-                frames = pipeline.wait_for_frames()
-                bgr_frame = frames.get_color_frame()
-                depth_frame = frames.get_depth_frame()
+            cur_frm_idx = int(bgr_frame.frame_number)
+            last_frm_idx = cur_frm_idx
 
-                cur_frm_idx = int(bgr_frame.frame_number)
-                last_frm_idx = cur_frm_idx
+            tele = get_rover_data(device)
 
-                tele = get_rover_data(device)
-
-                tele_data[cur_frm_idx] = tele
-
-                print(tele_data)
-
-                if not bgr_frame or depth_frame:
-                    continue
-
+            tele_data[cur_frm_idx] = tele
 
     finally:
         pipeline.stop()
         with open(tele_name, 'wb') as fp:
             pickle.dump(tele_data, fp)
             print('dictionary saved successfully to file')
-            # np.save(f, tele_data)
 
 
 def main():
@@ -132,8 +123,6 @@ def main():
 
         print("Rover Armed... Recording Starting.")
         record(pipeline, configuration, rover)
-
-
 
 
 if __name__ == "__main__":
