@@ -1,6 +1,4 @@
-import pickle
-
-from scipy import rand
+import csv
 
 from utilities.realsense_imu import initialize_camera
 from SITL_Test import connect_device
@@ -10,13 +8,16 @@ import keyboard
 import pyrealsense2.pyrealsense2 as rs
 import numpy as np
 import cv2
-from dronekit import connect, VehicleMode, LocationGlobalRelative
+from dronekit import connect, VehicleMode, LocationGlobalRelative, Vehicle
 import time
 import logging
 import random
 
+rover = None
+rov_steering_val = None
+rov_throttle_val = None
 
-def connect_device(s_connection, b=115200, num_attempts=10):
+def connect_device(s_connection, b=57600, num_attempts=10):
     print("Connecting to device...")
     device = None
     attempts = 1
@@ -35,17 +36,29 @@ def connect_device(s_connection, b=115200, num_attempts=10):
 
     return device
 
+def get_rover_data(device):
+    ster = rov_steering_val
+    thr = rov_throttle_val
 
-def create_rand_coord():
-    return [ random.randint(0, 100), random.randint(0, 100), random.randint(0, 100)]
+    grd_spd= device.groundspeed
+    vel = device.velocity
 
 
-def record(pipeline, config):
+    print(f"Ground speed:{grd_spd}")
+    print(f"Velocity: {vel}")
+    print(f"Steering rc: {ster}")
+    print(f"Throttle rc: {thr}")
+
+    return [grd_spd, *vel, ster, thr]
+
+
+def record(pipeline, config, device):
     pause = False
     i = 0
     last_frm_idx = -1
 
-    session__id = str(datetime.datetime.now().strftime('%Y_%m_%d'))
+    session__id = str(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M'))
+    print("Recording for session id " + session__id)
 
     try:
 
@@ -71,7 +84,7 @@ def record(pipeline, config):
 
         while True:
 
-            if not pause:
+            if device.armed:
                 frames = pipeline.wait_for_frames()
                 bgr_frame = frames.get_color_frame()
                 depth_frame = frames.get_depth_frame()
@@ -79,7 +92,7 @@ def record(pipeline, config):
                 cur_frm_idx = int(bgr_frame.frame_number)
                 last_frm_idx = cur_frm_idx
 
-                tele = create_rand_coord()
+                tele = get_rover_data(device)
 
                 tele_data[cur_frm_idx] = tele
 
@@ -88,11 +101,6 @@ def record(pipeline, config):
                 if not bgr_frame or depth_frame:
                     continue
 
-            key = cv2.waitKey(1) & 0xFF
-
-            if key == ord("q"):  # Quit program
-                quit_program = True
-                break
 
     finally:
         pipeline.stop()
@@ -103,10 +111,29 @@ def record(pipeline, config):
 
 
 def main():
-    p = rs.pipeline()
-    conf = rs.config()
-    # dev = connect_device("127.0.0.1:14550")
-    record(p, conf)
+    while True:
+        pipeline = rs.pipeline()
+        configuration = rs.config()
+        rover = connect_device("/dev/ttyACM0", b=115200)
+        print("Arm Device via radio controller.")
+
+        # dronkit has bugs that can pop up with newer rover firmware.
+        # One of these bus is returning None for channel values!
+        # This hack sets up a callback that dronekit calls into when it has new
+        # channel values to relay.  We will grab the values and store globally.
+        @rover.on_message('RC_CHANNELS')
+        def channels_callback(self, name, message):
+            global rov_steering_val, rov_throttle_val
+            rov_steering_val = message.chan1_raw
+            rov_throttle_val = message.chan3_raw
+
+        while not rover.armed:
+            time.sleep(1)
+
+        print("Rover Armed... Recording Starting.")
+        record(pipeline, configuration, rover)
+
+
 
 
 if __name__ == "__main__":
