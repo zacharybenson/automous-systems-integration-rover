@@ -1,57 +1,98 @@
-from tf.keras.utils import sequences
+import os
+from itertools import chain
 
-
+import tensorflow as tf
+import pandas as pd
+import numpy as np
 
 class CustomDataGen(tf.keras.utils.Sequence):
-    
-    def __init__(self,
-    	DEFAULT_DATA_PATH, 
-		offsets,
+
+	def __init__(self,
+		DEFAULT_DATA_PATH,
+		data,
+		use_sequence,
 		sequence_size,
-		shuffle_series,
-		random_State,
-		ends_with,
 		input_size,
 		batch_size):
-        
-    	self.default = DEFAULT_DATA_PATH
-    	self.offsets = offsets
-    	self.sequence_size = sequence_size
-    	self.shuffle_series = shuffle_series
-    	self.random_State = random_State
-    	self.ends_with = ends_with
-    	self.input_size = input_size
-    	self.batch_size = batch_size
+
+		self.use_sequence = use_sequence
+		self.DEFAULT_DATA_PATH = DEFAULT_DATA_PATH
+		self.data = data
+		self.n = len(data)
+		self.sequence_size = sequence_size
+		self.input_size = input_size
+		self.batch_size = batch_size
+
+	# This will create batch based on sequences:
 
 
-    
-    def __get_input(self, path, target_size):
-    
-        image = tf.keras.preprocessing.image.load_img(path)
-        image_arr = tf.keras.preprocessing.image.img_to_array(image)
-        image_arr = tf.image.resize(image_arr,(target_size[0], target_size[1])).numpy()
-
-        return image_arr/255.
-    
-    def __get_output(self, path, num_classes):
-    	y_steer = int(path.split('_')[1])
-    	y_throttle = int(path.split('_')[2])
-    	return (y_steer,y_throttle)
-    
-    def __get_data(self, batches):
-        # Generates data containing batch_size samples
+	def create_batches(self,sequences):
+		batches = []
+		num_of_batches = len(sequences) // self.batch_size
+		for i in range(num_of_batches):
+			batch = sequences[i:i+self.batch_size]
+			batches.append(batch)
 
 
-        return X_batch, Y_batch
-    
-    def __getitem__(self, index):
-        
-        batches = self.df[index * self.batch_size:(index + 1) * self.batch_size]
-        X, y = self.__get_data(batches)        
-        return X, y
-    
-    def __len__(self):
-        return self.n // self.batch_size
+		return batches
+
+
+
+	# This will get sequences of images.
+	def create_sequences(self,data):
+		data = data.values.tolist()
+		sequences = []
+		for i in range(len(data)):
+			if i == (len(data) - self.sequence_size):
+				break
+			sequence = [data[i + j] for j in range(self.sequence_size)]
+			sequences.append(sequence)
+
+		return sequences
+
+	def __get_input(self, samples, target_size):
+		# for sample in samples:
+		image = tf.keras.preprocessing.image.load_img(self.DEFAULT_DATA_PATH + samples[0])
+		image = tf.image.rgb_to_grayscale(image)
+		image_arr = tf.keras.preprocessing.image.img_to_array(image)
+		image_arr = tf.image.resize(image_arr,(target_size[0], target_size[1])).numpy()
+		return image_arr/255
+
+
+	def __get_output(self, samples,index):
+		path = samples[0]
+		y = float(path.split('_')[index])
+
+		return y
+
+	def __get_data(self, batches, index):
+		# Generates data containing batch_size samples
+		if index <= self.__len__():
+
+			batch = batches[index]
+			X_batch = np.asarray([self.__get_input(x, self.input_size) for x in batch])
+			y0_batch = np.asarray([self.__get_output(y,1) for y in batch])
+			y1_batch = np.asarray([self.__get_output(y,2) for y in batch])
+
+
+		return X_batch,y0_batch, y1_batch
+
+	def __getitem__(self, index):
+
+		if self.use_sequence:
+			sequences = self.create_sequences(self.data)
+			sequences = list(np.concatenate(sequences))
+			batches = self.create_batches(sequences)
+			X, y0, y1 = self.__get_data(batches, index)
+
+
+		else:
+			batches = self.create_batches(self.data.values.tolist())
+			X, y0, y1 = self.__get_data(batches,index)
+		return X, y0, y1
+
+	def __len__(self):
+		return self.n // self.batch_size
 
 
 #Implement Series processing
@@ -59,69 +100,17 @@ class CustomDataGen(tf.keras.utils.Sequence):
 
 
 
+def create_list_of_data(path,ends_with):
+	cols = ["index", "file_name"]
+	files = []
 
+	for file in os.listdir(path):
+		if file.endswith(ends_with + ".png"):
+			index = int(file.split('_')[0].lstrip("0"))
+			files.append([index, file])
+	df = pd.DataFrame(files)
+	df.columns = cols
+	df.set_index('index', inplace=True)
+	df = df.sort_index(ascending=True)
 
-
-
-DEFAULT_DATA_PATH = ""
-SEED = datetime.time.now()
-
-if use sequences:
-#Use randomized 10200 sequences
-	Samples = data_gen.get_samples_in_sequence(
-	DEFAULT_DATA_PATH, 
-	offsets=offsets, 
-	sequence_size=sequence_size, 
-	shuffle_series=shuffle_data,
-	random_State=SEED, 
-	ends_with=ends_with)
-
-else:
-# Use randomized images
-	_, samples = data_gen.get_sample_list(
-		DEFAULT_DATA_PATH, 
-		do_shuffle=shuffle_data, 
-		randon_state=SEED,
-		ends_withs=ends_with)
-
-if ant_data < 1.0:
-# Use only a portion of the entire dataset samples
-	train_test_split(samples, random_state=SEED, test_size = ant_data)
-if not skip_test:
-	# Splitting the training set to training and validation sets
-	# using sklearn. .20 Indicates 20% of the training Is used for validation. train_samples, validation_samples |
-	
-	train_test_split(samples, random_state=SEED, test_size=0.20)
-	
-	# Splitting the training set into training and test sets
- 	# using sklearn. .12 Indicates 124 of the training is test set. 
- 	train_samples, test_samples = train_test_split(train_samples,
- 													random_state=SEED,
- 													test_size=0.12)
-
-	test_generator = data_gen.single_samples_generator(test_samples,
-														ends_with=ends_with, 
-														color_depth=False, 
-														bw_depth=use_depth, 
-														batch_size=mission_models.BATCH_SIZE, 
-														sample _name="test")
-
-	test_steps = int(len(test_samples) / mission_nodels.BATCH_SIZE)
-
-
-train_generator = data_gen.single_samples_generator(train_samples,
-													color_deptha = false,
-													bw_depthmuse_depth,
-													batch_size=mission_models.BATCH_SIZE, 
-													sample_names"train"
-													ends_with=ends_with)
-
-validation_generator = data_gen.single_samples_generator(validation_samples,
-														color_depth = False,
-														bw_depth = use_depth,
-														batch_size = mission_models.BATCH_SIZE,
-														sample_name= "validation", 
-														ends_with = ends_with)
-
-
-
+	return df
