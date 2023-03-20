@@ -2,5 +2,5 @@ Run from terminal: PMC - Suspected issue: Not using the environment when running
 Rover Recorder check out: FMC
 Data Processor check out: PMC - Suspected issue: File path names.
 data_gen.py: FMC - Last update: Added sequencing.
-training.py: FMC - Last update: incorporated data gen
+training.py: FMC - Last update: Incorporated data gen
 run.py: PMC - Suspected issues: I don't know how to properly set rover variables
