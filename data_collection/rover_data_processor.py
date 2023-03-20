@@ -114,7 +114,7 @@ def process_bag_file(path, dest_folder=None, skip_if_exists=False):
         fps = FPS().start()
         while playback.current_status() == rs.playback_status.playing:
             try:
-                frames = pipeline.wait_for_frames(timeout_ms=5000)  # pipeline.poll_for_frames()
+                frames = pipeline.wait_for_frames(timeout_ms=5000)
                 if not frames:
                     print("no frames")
                     continue
@@ -165,9 +165,9 @@ def process_bag_file(path, dest_folder=None, skip_if_exists=False):
                 # cv2.imshow("White Out!", white_range)
                 # cv2.imshow("Color Processed", color_frame)
                 #cv2.imshow("Depth processed", depth_frame)
+
                 # Write out our various frames
                 # with data as part of the file name...
-
                 # # rgb
                 c_frm_name = f"{'{:09d}'.format(frm_num)}_{throttle}_{steering}_c.png"
 
@@ -188,9 +188,6 @@ def process_bag_file(path, dest_folder=None, skip_if_exists=False):
 
                 key = cv2.waitKey(1) & 0xFF
 
-                # if the `q` key was pressed, break from the loop
-                # if key == ord("q"):
-                #    break
             except Exception as e:
                 print(e)
                 continue
