@@ -55,6 +55,9 @@ def record(pipeline, config, device):
     session__id = str(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M'))
     print("Recording for session id " + session__id)
 
+    tele_name = '/media/usafa/data/tele_data_' + session__id + '.pkl'
+    tele_data = {}
+
     try:
 
         logging.info("Establishing Session ID:" + session__id)
@@ -62,9 +65,6 @@ def record(pipeline, config, device):
         bag_name = '/media/usafa/data/data_' + session__id + '.bag'
 
         config.enable_record_to_file(f"{bag_name}")
-
-        tele_name = '/media/usafa/data/tele_data_' + session__id + '.pkl'
-        tele_data = {}
 
         logging.info("Configuring depth stream.")
         config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
