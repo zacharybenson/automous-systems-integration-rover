@@ -11,11 +11,8 @@ import numpy as np
 # 10.1.100.236 accer
 
 session__id = str(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M'))
-BAGFILENAME = 'data_ ' + session__id
-NPFILENAME = 'tele_data_' + session__id
-ROOT_DIR = '/media/usafa/data'
-BAGFILE = ROOT_DIR + '/' + BAGFILENAME + '.bag'
-PFILE = ROOT_DIR + '/' + NPFILENAME + '.csv'
+ROOT_DIR = '/media/usafa/data/'
+
 
 
 def load_telem_file(path):
@@ -25,7 +22,8 @@ def load_telem_file(path):
 
     # Load data from the data file (comma delimited), and
     # hold it in a structure for quick lookup (maybe a dictionary).
-    tele = np.genfromtxt('path', delimiter=',')
+    with open(path, "rb") as fp:
+        tele = pickle.load(fp)
 
     return tele
 
@@ -128,7 +126,7 @@ def process_bag_file(path, dest_folder=None, skip_if_exists=False):
                 # Get related throttle and steering for frame
                 frm_num = color_frame.frame_number
                 print(f"Processing frame {frm_num}...")
-                (throttle, steering, speed) = frm_lookup.get(frm_num)
+                (throttle, steering, _,_,_,_) = frm_lookup.get(frm_num)
 
                 color_frame = np.asanyarray(color_frame.get_data())
                 c_depth_frame = np.asanyarray(colorizer.colorize(depth_frame).get_data())

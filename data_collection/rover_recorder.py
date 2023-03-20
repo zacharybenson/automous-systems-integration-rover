@@ -1,7 +1,4 @@
 import pickle
-
-from misc.SITL_Test import connect_device
-
 import datetime
 import pyrealsense2.pyrealsense2 as rs
 from dronekit import connect
