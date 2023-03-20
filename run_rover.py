@@ -1,18 +1,12 @@
-import csv
+from misc.SITL_Test import connect_device
 
-from utilities.realsense_imu import initialize_camera
-from SITL_Test import connect_device
-
-import datetime
-import keyboard
 import pyrealsense2.pyrealsense2 as rs
 import numpy as np
 import cv2
-from dronekit import connect, VehicleMode, LocationGlobalRelative, Vehicle
+from dronekit import connect
 import time
 import logging
-import random
-
+from tensorflow.keras.models import load_model
 rover = None
 rov_steering_val = None
 rov_throttle_val = None
@@ -37,40 +31,64 @@ def connect_device(s_connection, b=115200, num_attempts=10):
 
     return device
 
+def process_image(frames):
+
+    aligned_frames = alignedFs.process(frames)
+    color_frame = aligned_frames.get_color_frame()
+    color_frame = cv2.resize(color_frame, (320, 240))
+
+    hsv = cv2.cvtColor(color_frame, cv2.COLOR_BGR2HSV)
+    sensitivity = 125
+    lower_white = np.array([0, 0, 255 - sensitivity])
+    upper_white = np.array([255, sensitivity, 255])
+
+    # Threshold the HSV image to get only white colors
+    mask = cv2.inRange(hsv, lower_white, upper_white)
+    # Bitwise-AND mask and original image
+    white_range = cv2.bitwise_and(color_frame, color_frame, mask=mask)
+
+    # NOTE: any cropping could be done here...
+    white_range = white_range[0:214, 0:240]
+
+    return white_range
+
+def inference(samples):
+    # File path
+    filepath = './model/' #fixme Put model name here
+
+    # Load the model
+    model = load_model(filepath, compile=True)
+
+    # Convert into Numpy array
+    samples_to_predict = np.array(samples)
+
+    # Generate predictions for samples
+    predictions = model.predict(samples_to_predict)
+
+    return predictions
+
+def set_rover_data(device, ster, thr):
+    rov_steering_val = ster
+    rov_throttle_val = thr
+    print(f"Steering rc: {ster}")
+    print(f"Throttle rc: {thr}")
+
 
 def get_rover_data(device):
     ster = rov_steering_val
     thr = rov_throttle_val
-    grd_spd = device.groundspeed
-    vel = device.velocity
 
-    print(f"Ground speed:{grd_spd}")
-    print(f"Velocity: {vel}")
     print(f"Steering rc: {ster}")
     print(f"Throttle rc: {thr}")
 
-    return [grd_spd, *vel, ster, thr]
+    return [ster, thr]
+
+def percent_difference(old, new):
+    return abs(old - new)/((old + new)/2) * 100
 
 
-def record(pipeline, config, device):
-    pause = False
-    i = 0
-    last_frm_idx = -1
-
-    session__id = str(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M'))
-    print("Recording for session id " + session__id)
-
+def run(pipeline, config, device):
     try:
-
-        logging.info("Establishing Session ID:" + session__id)
-
-        bag_name = '/media/usafa/data/data_' + session__id + '.bag'
-
-        config.enable_record_to_file(f"{bag_name}")
-
-        tele_name = '/media/usafa/data/tele_data_' + session__id + '.pkl'
-        tele_data = {}
-
         logging.info("Configuring depth stream.")
         config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
 
@@ -80,26 +98,23 @@ def record(pipeline, config, device):
         logging.info("Starting camera streams...")
         pipeline.start(config)
 
-        logging.info("Recording realsense sensor stream..")
+        logging.info("Realsense sensor stream..")
 
         if device.armed:
+            logging.info("Get frames from stream..")
             frames = pipeline.wait_for_frames()
-            bgr_frame = frames.get_color_frame()
-            depth_frame = frames.get_depth_frame()
 
-            cur_frm_idx = int(bgr_frame.frame_number)
-            last_frm_idx = cur_frm_idx
+            logging.info("Process image..")
+            images = process_image(frames)
 
-            tele = get_rover_data(device)
+            logging.info("Getting predictions model..")
+            new_ster, new_thr = inference(images)
+            prev_ster, prev_thr = get_rover_data(device)
 
-            tele_data[cur_frm_idx] = tele
-
-    finally:
-        pipeline.stop()
-        with open(tele_name, 'wb') as fp:
-            pickle.dump(tele_data, fp)
-            print('dictionary saved successfully to file')
-
+            #If change is less than 20% difference then input it.
+            if percent_difference(prev_thr,new_thr) < 20 & percent_difference(prev_ster,new_ster):
+                rov_steering_val = new_ster
+                rov_throttle_val = new_thr
 
 def main():
     while True:
@@ -121,10 +136,9 @@ def main():
         while not rover.armed:
             time.sleep(1)
 
-        print("Rover Armed... Recording Starting.")
-        record(pipeline, configuration, rover)
+        print("Rover Armed... The machines are taking over...")
+        run(pipeline, configuration, rover)
 
 
 if __name__ == "__main__":
-    # execute only if run as a script
     main()

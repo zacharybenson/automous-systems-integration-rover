@@ -1,17 +1,12 @@
-import csv
+import pickle
 
-from utilities.realsense_imu import initialize_camera
-from SITL_Test import connect_device
+from misc.SITL_Test import connect_device
 
 import datetime
-import keyboard
 import pyrealsense2.pyrealsense2 as rs
-import numpy as np
-import cv2
-from dronekit import connect, VehicleMode, LocationGlobalRelative, Vehicle
+from dronekit import connect
 import time
 import logging
-import random
 
 rover = None
 rov_steering_val = None
@@ -82,7 +77,7 @@ def record(pipeline, config, device):
 
         logging.info("Recording realsense sensor stream..")
 
-        if device.armed:
+        while device.armed:
             frames = pipeline.wait_for_frames()
             bgr_frame = frames.get_color_frame()
             depth_frame = frames.get_depth_frame()
