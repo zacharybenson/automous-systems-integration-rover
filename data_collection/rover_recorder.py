@@ -9,7 +9,6 @@ rover = None
 rov_steering_val = None
 rov_throttle_val = None
 
-
 def connect_device(s_connection, b=115200, num_attempts=10):
     print("Connecting to device...")
     device = None

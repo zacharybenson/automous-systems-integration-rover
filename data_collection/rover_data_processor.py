@@ -8,26 +8,20 @@ import glob
 from imutils.video import FPS
 import pyrealsense2.pyrealsense2 as rs
 import numpy as np
+
 # 10.1.100.236 accer
 
 session__id = str(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M'))
 ROOT_DIR = '/media/usafa/data/'
 
 
-
 def load_telem_file(path):
-    # Create lookup for frame index (ID)
-    # In other words, come up with a way to hold frame data
-    # indexed by frame ID.
-
     # Load data from the data file (comma delimited), and
     # hold it in a structure for quick lookup (maybe a dictionary).
     with open(path, "rb") as fp:
         tele = pickle.load(fp)
 
     return tele
-
-
 
 
 def get_num_frames(filename):
@@ -54,6 +48,32 @@ def get_num_frames(filename):
     pipe.stop()
     return t, frame_counts
 
+
+def apply_mask(color_frame):
+    hsv = cv2.cvtColor(color_frame, cv2.COLOR_BGR2HSV)
+    sensitivity = 85
+    lower_white = np.array([0, 0, 255 - sensitivity])
+    upper_white = np.array([255, sensitivity, 255])
+
+    # Threshold the HSV image to get only white colors
+    mask = cv2.inRange(hsv, lower_white, upper_white)
+    # Bitwise-AND mask and original image
+    return mask
+
+
+def crop_image(image):
+    width, height = image.size
+
+    # Setting the points for cropped image
+    left = width / 3
+    right = width
+
+    top = height / 2
+    bottom = height
+
+    # Cropped image of above dimension
+    # (It will not change original image)
+    image_cropped = image.crop((left, top, right, bottom))
 
 def process_bag_file(path, dest_folder=None, skip_if_exists=False):
     fps = None
@@ -99,9 +119,6 @@ def process_bag_file(path, dest_folder=None, skip_if_exists=False):
         # before turning off real-time streaming.
         profile = pipeline.get_active_profile()
 
-        # Going to export depth (color and b&w),
-        # rgb, and any other processed results we need/want...
-
         # setup colorizer for depth map
         colorizer = rs.colorizer()
         playback = profile.get_device().as_playback()
@@ -121,67 +138,26 @@ def process_bag_file(path, dest_folder=None, skip_if_exists=False):
                 aligned_frames = alignedFs.process(frames)
 
                 color_frame = aligned_frames.get_color_frame()
-                depth_frame = aligned_frames.get_depth_frame()
 
                 # Get related throttle and steering for frame
                 frm_num = color_frame.frame_number
                 print(f"Processing frame {frm_num}...")
-                (throttle, steering, _,_,_,_) = frm_lookup.get(frm_num)
+                (throttle, steering, _, _, _, _) = frm_lookup.get(frm_num)
 
                 color_frame = np.asanyarray(color_frame.get_data())
-                c_depth_frame = np.asanyarray(colorizer.colorize(depth_frame).get_data())
-                depth_frame = np.asanyarray(depth_frame.get_data())
 
-                color_frame = cv2.resize(color_frame, (320, 240))
+                color_frame = cv2.resize(color_frame, 160, 120)
 
-                # Maybe we want to do some white line detection here....
+                white_frame = apply_mask(color_frame)
 
-                # define range of white color in HSV
-                # change it according to your need !
-                hsv = cv2.cvtColor(color_frame, cv2.COLOR_BGR2HSV)
-                sensitivity = 125
-                lower_white = np.array([0, 0, 255 - sensitivity])
-                upper_white = np.array([255, sensitivity, 255])
-
-                # Threshold the HSV image to get only white colors
-                mask = cv2.inRange(hsv, lower_white, upper_white)
-                # Bitwise-AND mask and original image
-                white_range = cv2.bitwise_and(color_frame, color_frame, mask=mask)
-
-                # NOTE: any cropping could be done here...
-                white_range = white_range[0:214,0:240]
-
-                # Do we need to do any resizing, blur, edge enhancement`, etc.?
-                # color_frame = DO STUFF
-
-                # What about depth... any denoising?
-                # depth_frame = DO STUFF
+                white_frame = crop_image(white_frame)
 
                 i += 1
 
-                # show the output frame for sanity check
-                # cv2.imshow("White Out!", white_range)
-                # cv2.imshow("Color Processed", color_frame)
-                #cv2.imshow("Depth processed", depth_frame)
-
-                # Write out our various frames
-                # with data as part of the file name...
-                # # rgb
-                c_frm_name = f"{'{:09d}'.format(frm_num)}_{throttle}_{steering}_c.png"
-
-                # # white detection
                 w_frm_name = f"{'{:09d}'.format(frm_num)}_{throttle}_{steering}_w.png"
 
-                # depth (single layer gray)
-                d_frm_name = f"{'{:09d}'.format(frm_num)}_{throttle}_{steering}_d.png"
+                cv2.imwrite(os.path.join(dest_path, w_frm_name), white_frame)
 
-                # rgb depth
-                # cd_frm_name = f"{'{:09d}'.format(frm_num)}_{throttle}_{steering}_cd.png"
-
-                cv2.imwrite(os.path.join(dest_path, c_frm_name), color_frame)
-                cv2.imwrite(os.path.join(dest_path, w_frm_name), white_range)
-                cv2.imwrite(os.path.join(dest_path, d_frm_name), depth_frame)
-                # cv2.imwrite(os.path.join(dest_path, cd_frm_name), c_depth_frame)
                 fps.update()
 
                 key = cv2.waitKey(1) & 0xFF
@@ -193,7 +169,6 @@ def process_bag_file(path, dest_folder=None, skip_if_exists=False):
         print(e)
     finally:
         pass
-
     try:
 
         # stop recording
@@ -224,6 +199,7 @@ def main():
             process_bag_file(BAGFILE)
         else:
             continue
+
 
 if __name__ == "__main__":
     main()
