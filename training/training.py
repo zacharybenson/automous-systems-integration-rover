@@ -1,94 +1,65 @@
 # baseline cnn model for mnist
-import tensorflow as tf
-from numpy import mean
-from numpy import std
-from matplotlib import pyplot
-from sklearn.model_selection import KFold
-from keras.datasets import mnist
-from keras.models import Sequential
-from keras.layers import Conv2D
-from tensorflow.keras.utils import to_categorical
-from keras.layers import Dense
-from keras.layers import Flatten
-from tensorflow.keras.optimizers import SGD
-from tensorflow.keras import layers
-from keras.optimizers import adam_v2
-from data_gen import create_list_of_data, CustomDataGen
+import datetime
 import matplotlib.pyplot as plt
-from tensorflow.python.client.device_lib import list_local_devices
+import numpy as np
+import tensorflow as tf
+from keras.optimizers import adam_v2
 from sklearn.model_selection import train_test_split
-
+from tensorflow.keras import layers
+from tensorflow.keras.callbacks import EarlyStopping
 # callbacks
 from tensorflow.keras.callbacks import LearningRateScheduler
-from tensorflow.keras.callbacks import EarlyStopping
 from tensorflow.keras.callbacks import ModelCheckpoint
+# Custom datagen
+from data_gen import create_list_of_data, CustomDataGen
 
+INPUT_SIZE = [160, 107]
 # checkpointing
 CHECK_POINT_FILEPATH = '/Users/zacharybenson/Documents/github/automous-systems-integration-rover/model/'
-DEFAULT_DATA_PATH = "/Users/zacharybenson/Downloads/test/"
+DEFAULT_DATA_PATH = "/Users/zacharybenson/Desktop/w/"
+session__id = str(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))
 
 
 def define_model():
-    inputs = tf.keras.Input(shape=(28, 28, 1))
-    x = layers.Conv2D(filters=64,
+    inputs = tf.keras.Input(shape=(INPUT_SIZE[0], INPUT_SIZE[1], 1))
+
+    x = layers.Conv2D(filters=16,
                       kernel_size=3,
                       activation="relu",
                       kernel_initializer="truncated_normal")(inputs)
-    x = layers.MaxPooling2D(pool_size=2)(x)
-    x = layers.Dropout(.5)(x)
-
-    x = layers.Conv2D(filters=128,
+    x = layers.Conv2D(filters=16,
                       kernel_size=3,
                       activation="relu",
                       kernel_initializer="truncated_normal")(x)
-    x = layers.MaxPooling2D(pool_size=2)(x)
-    x = layers.Dropout(.5)(x)
-
-    x = layers.Conv2D(filters=256,
+    x = layers.Conv2D(filters=16,
                       kernel_size=3,
                       activation="relu",
                       kernel_initializer="truncated_normal")(x)
-    x = layers.MaxPooling2D(pool_size=2)(x)
-    x = layers.Dropout(.5)(x)
-
     x = layers.Flatten()(x)
-    x = layers.BatchNormalization()(x)
+    x = layers.Dense(512, kernel_initializer="truncated_normal")(x)
+    x = layers.Dense(256, kernel_initializer="truncated_normal")(x)
+    x = layers.Dense(64, kernel_initializer="truncated_normal")(x)
+    outputs = layers.Dense(2)(x)
 
-    outputs = layers.Dense(2,activation='linear')(x)
-    opt = SGD(learning_rate=0.1, momentum=0.9)
 
+    opt = adam_v2.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, clipvalue=0.1)
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
-    model.compile(loss=["mse"],
-                  optimizer=adam_v2.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, clipvalue=0.1),
-                  metrics=["accuracy"])
+    model.compile(loss="mse", optimizer=opt)
     print(model.summary())
     return model
 
 
 # ------ Callbacks ------
-model_early_stoping_callback = EarlyStopping(monitor='loss', patience=3)
-
+model_early_stoping_callback = EarlyStopping(monitor='val_loss', patience=3)
 model_checkpoint_callback = ModelCheckpoint(
-    filepath=CHECK_POINT_FILEPATH,
+    filepath=CHECK_POINT_FILEPATH + "model" + session__id + ".h5",
     save_weights_only=False,
-    monitor='val_acc',
-    mode='max',
+    monitor='val_loss',
+    mode='min',
     save_best_only=True)
 
-
-def scheduler(epoch):
-    if epoch < 10:
-        return 0.001
-    else:
-        return 0.001 * tf.math.exp(0.1 * (10 - epoch))
-
-
-model_learning_rate_scheduler_callback = LearningRateScheduler(scheduler)
-
-
 callbacks = [model_early_stoping_callback,
-             model_checkpoint_callback,
-             model_learning_rate_scheduler_callback]
+             model_checkpoint_callback],
 
 
 # ------ Callbacks ------
@@ -102,13 +73,14 @@ def train(train_generator, test_generator, model, callback_list):
                             epochs=10, batch_size=32,
                             validation_data=test_generator,
                             callbacks=callback_list,
-                            verbose=1)
+                            verbose=1, shuffle=True)
         # evaluate model
-        _, score = model.evaluate(test_generator, verbose=1)
-        print('> %.3f' % (score * 100.0))
+        # _, score = model.evaluate(test_generator, verbose=1)
+        # print('> %.3f' % (score * 100.0))
         # stores scores
-
-    return score, history
+        model.save(CHECK_POINT_FILEPATH)
+    return history
+    # return score, history
 
 
 # plot diagnostic learning curves
@@ -123,35 +95,33 @@ def plot_loss(histories):
     plt.ylabel("Loss")
     plt.legend()
     plt.show()
+    plt.savefig('model_' + session__id + '_loss_curve' + '.png')
 
 
-def plot_acc(histories):
-    plt.clf()
-    acc = histories.history["accuracy"]
-    val_acc = histories.history["val_accuracy"]
-    epochs = range(1, len(acc) + 1)
-    plt.plot(epochs, acc, "bo", label="Training accuracy")
-    plt.plot(epochs, val_acc, "b", label="Validation accuracy")
-    plt.title("Training and validation accuracy")
-    plt.xlabel("Epochs")
-    plt.ylabel("Accuracy")
-    plt.legend()
-    plt.show()
+def load_keras_model_direct(model_path):
+    model = tf.keras.models.load_model(model_path)
+    model.summary()
+    return model
 
 
 # run the test harness for evaluating a model
 def train_harness():
     # load dataset
     df = create_list_of_data(DEFAULT_DATA_PATH, "_w")
-    training, test = train_test_split(df, test_size=0.5)
-    training_generator = CustomDataGen(DEFAULT_DATA_PATH,training,True, 5, (28, 28), 20)
-    test_generator = CustomDataGen(DEFAULT_DATA_PATH,test,False, 5, (28, 28), 32)
-    # evaluate model
-    model = define_model()
-    scores, histories = train(training_generator, test_generator, model, callbacks)
+    training, test = train_test_split(df, test_size=0.2)
+    training_generator = CustomDataGen(DEFAULT_DATA_PATH, training, True, 5, INPUT_SIZE, 32)
+    test_generator = CustomDataGen(DEFAULT_DATA_PATH, test, True, 5, INPUT_SIZE, 32)
 
-    # learning curves
-    plot_acc(histories)
+    continue_train = False
+
+    if continue_train:
+        model = load_keras_model_direct(
+            '/Users/zacharybenson/Documents/github/automous-systems-integration-rover/model/model2023_04_05_16_03_49.h5')
+    # evaluate model
+    else:
+        model = define_model()
+
+    histories = train(training_generator, test_generator, model, callbacks)
     plot_loss(histories)
 
 
