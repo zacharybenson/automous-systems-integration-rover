@@ -20,7 +20,6 @@ class CustomDataGen(tf.keras.utils.Sequence):
                  use_weighted,
                  ):
 
-
         self.use_sequence = use_sequence
         self.DEFAULT_DATA_PATH = DEFAULT_DATA_PATH
         self.data = data
@@ -31,7 +30,7 @@ class CustomDataGen(tf.keras.utils.Sequence):
         self.batches = ''
         self.sequences = ''
         self.use_weighted = use_weighted
-        self.weighted_kernel = self.get_gaussian_matrix(self.input_size)
+        self.weighted_kernel = self.get_gaussian_matrix(h=self.input_size[0], w=self.input_size[1])
 
     # This will create batch based on sequences:
 
@@ -65,11 +64,10 @@ class CustomDataGen(tf.keras.utils.Sequence):
         lower_white = np.array([0, 0, 255 - sensitivity])
         upper_white = np.array([255, sensitivity, 255])
         mask = cv2.inRange(hsv, lower_white, upper_white)
-        white_range = cv2.bitwise_and(image, image, mask=mask)
 
-        return white_range
+        return mask
 
-    def get_gaussian_matrix(h,w, h_stdev=.15, w_stdev=.15):
+    def get_gaussian_matrix(self, h, w, h_stdev=.15, w_stdev=.15):
         '''returns a 2D gaussian matrix with '''
 
         # See: https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.gaussian.html
@@ -82,7 +80,7 @@ class CustomDataGen(tf.keras.utils.Sequence):
         #       However, the outer product of 2 nxm vectors u*vT would result in a
         #         matrix the size of nxm.
         kernel = np.outer(k1d, k2d)
-        plot_matrix(kernel, "Kernel", False)
+        # plot_matrix(kernel, "Kernel", False)
 
         return kernel
 
@@ -94,10 +92,14 @@ class CustomDataGen(tf.keras.utils.Sequence):
         # for sample in samples:
         for sample in samples:
             image = cv2.imread(sample, cv2.IMREAD_GRAYSCALE)
+            image = cv2.resize(image, (160, 120))
+            height, width = image.shape
+            image = image[int(width / 3):width, int(height / 2):height]
+
             if self.use_weighted:
-                #this creates a two channel image
+                # this creates a two channel image
                 weighted_image = self.weight_image(image)
-                image = np.concatenate((image, weighted_image), axis=2)
+                image = np.stack((image, weighted_image), axis=2)
             return image
 
     def __get_output(self, samples):
@@ -156,20 +158,4 @@ def create_list_of_data(path, ends_with):
 
     return df
 
-def plot_matrix(matrix, title, plot_image=True):
-    # creating a plot
-    pixel_plot = plt.figure()
 
-    #pixel_plot.add_axes([0,matrix.shape[1],matrix.shape[0], matrix.shape[1]])
-    plt.title(title)
-
-    if plot_image:
-        pixel_plot = plt.imshow(matrix)
-    else:
-        pixel_plot = plt.imshow(
-            matrix, cmap='Reds', interpolation='nearest')
-
-    plt.colorbar(pixel_plot)
-
-    # show plot
-    plt.show()
