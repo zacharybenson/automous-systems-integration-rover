@@ -1,24 +1,18 @@
+import logging
+import time
 
-import tensorflow.keras
-from PIL.Image import Image
+import cv2
+import numpy as np
+import pyrealsense2.pyrealsense2 as rs
+from dronekit import connect
 from tensorflow import keras
-from PIL import Image as Img
 
 from misc.SITL_Test import connect_device
-import tensorflow as tf
-import pyrealsense2.pyrealsense2 as rs
-import numpy as np
-import cv2
-from dronekit import connect
-import time
-import logging
-from tensorflow.keras.models import load_model
+
 rover = None
 rov_steering_val = None
 rov_throttle_val = None
-from PIL import Image as im
-from training.training import define_model
-MODEL = '/home/github/automous-systems-integration-rover/model2023_03_22_13_25.h5'
+MODEL = '/home/usafa/Desktop/automous-systems-integration-rover-main/model/model2023_04_05_19_49_26.h5'
 
 def connect_device(s_connection, b=115200, num_attempts=10):
     print("Connecting to device...")
@@ -39,25 +33,23 @@ def connect_device(s_connection, b=115200, num_attempts=10):
 
     return device
 
+def apply_mask(color_frame):
+    low_white = (150,150,150)
+    high_white = (255,255,255)
+# Threshold the HSV image to get only white colors
+    mask = cv2.inRange(color_frame,low_white, high_white)
+    # Bitwise-AND mask and original image
+    return mask
+
 def process_image(frames):
 
-    color_frame= frames.get_color_frame()
-    color_frame = cv2.resize(color_frame, (320, 240))
 
-    hsv = cv2.cvtColor(color_frame, cv2.COLOR_BGR2HSV)
-    sensitivity = 125
-    lower_white = np.array([0, 0, 255 - sensitivity])
-    upper_white = np.array([255, sensitivity, 255])
+    color_frame = cv2.resize(frames, (160, 120))
+    image = apply_mask(color_frame)
+    height, width = image.shape
+    image = image[int(width / 3):width,int(height / 2):height]
 
-    # Threshold the HSV image to get only white colors
-    mask = cv2.inRange(hsv, lower_white, upper_white)
-    # Bitwise-AND mask and original image
-    white_range = cv2.bitwise_and(color_frame, color_frame, mask=mask)
-
-    # NOTE: any cropping could be done here...
-    # white_range = white_range[0:214, 0:240]
-
-    return white_range
+    return image
 
 def inference(samples, model):
     # File path
@@ -119,41 +111,13 @@ def run(pipeline, config, device,model):
 
             color_frame = np.asanyarray(color_frame.get_data())
 
-
-            color_frame = cv2.resize(color_frame, (320, 240))
-            # Maybe we want to do some white line detection here....
-
-            # define range of white color in HSV
-            # change it according to your need !
-            hsv = cv2.cvtColor(color_frame, cv2.COLOR_BGR2HSV)
-            sensitivity = 125
-            lower_white = np.array([0, 0, 255 - sensitivity])
-            upper_white = np.array([255, sensitivity, 255])
-
-            # Threshold the HSV image to get only white colors
-            mask = cv2.inRange(hsv, lower_white, upper_white)
-            # Bitwise-AND mask and original image
-            white_range = cv2.bitwise_and(color_frame, color_frame, mask=mask)
-
-            # NOTE: any cropping could be done here...
-            # white_range = white_range[0:214, 0:240]
-
-            # NOTE: any cropping could be done here...
-            img =  Img.fromarray(white_range,'RGB')
-
-            image = tf.image.rgb_to_grayscale(img)
-            image_arr = tf.keras.preprocessing.image.img_to_array(image)
-            image_arr = tf.image.resize( image_arr, (28,28)).numpy()
-            image_arr = image_arr/255
+            image_arr = process_image(color_frame)
 
             logging.info("Getting predictions model..")
             image_arr = np.expand_dims(image_arr, 0)
             new_ster, new_thr = inference(image_arr, model)
-            prev_ster, prev_thr = get_rover_data(device)
-
-            #If change is less than 20% difference then input it.
-            # if percent_difference(prev_thr,new_thr) < 20.0  & percent_difference(prev_ster,new_ster) < 20.0:
-            device.channels.overrides = {'1': int(new_ster), '3': int(1.1* new_thr)}
+            print([new_thr,new_ster])
+            device.channels.overrides = {'1': int(new_ster), '3': int(new_thr)}
 
     finally:
         print("finish")
