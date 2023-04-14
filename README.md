@@ -88,5 +88,59 @@ To create my models I conducted three primary experiments.
   Validation loss quickly decreased and then continued to steadily decrease over the epochs. Although this was true the difference between training, and val loss were quite large; this could be an indication of over fitting.
     - Due to time constraints this was tested on the rover.
  
-</div>
+ #### Reworking the Pipeline
+ - After the previous three experiments there were indications that the models were not training on all of the data. <br>
+ This pointed to an issue that was related to my data generator. After looking deeper it was clear that the data generator <br>
+ was not reading all of the information from the directory. 
+ - Also discovered in this investigation was that the image were not correctly being processed. Looking deeper I discovered that rather than passing a black and white mask of the image to model, I was passing an image that had had a black and white mask applied to them. This was corrected in the data generator.
+ - Additionally after inspecting the image it was clear that the camera angle that was used getting to noise in the form of caputuring the surroundings of the rover rather than the track itself.
+- With these changes I pressed on to a final experiment.
+ </div>
+
+#### Experiment 4
+- Experiment 4 Specs:
+    - Input size 67 x 60
+     - These are cropped images to cut out noise.
+    - 3 Convolutional layers
+    - 512 Dense
+    - 256 Dense
+    - 128 Dense
+    - 64 Dense
+    - 2 Dense
+    - Initialized with truncated normal
+    - Batch normalization
+    - mse as loss function
+    
+- It was clear that I was desimating the information that was being passed to the end of the model. As such I removed the pooling and drop out layers.
+- Results: After training this model, it performed moderately well, being able to find and hold the lines until it was met with turns. This is likely a result of a small training set.
+
+### Part 2 - Introducing Un-Supervised Reinforcement Learning
+
+In this portion of the project I explored how reinforcement learning could improve the performance of the previous model.
+To do so, I looked for ways to incentivise the rover to find and maintain the line.
+The primary method to do so was to create a weighted image that favored white pixels that are in the center of the image.
+This weighted image was the product of the image array, and a gaussian distrobution array - as such resulting in white cells in the center
+of the image having the most weight. 
+
+As it pertains to the model, I had a choice on whether this would be the primary image that the model would be trainined on or if it would be <br>
+processed along side the other image.
+
+#### Experiment 5
+- Experiment 4 Specs:
+    - Input size 67 x 60
+     - These are cropped images to cut out noise.
+    - Input (67, 60, 2, x)
+     - This is a two channel image that includes the orginal image, and the weighted image.
+    - 3 Convolutional layers
+    - 512 Dense
+    - 256 Dense
+    - 128 Dense
+    - 64 Dense
+    - 2 Dense
+    - Initialized with truncated normal
+    - Batch normalization
+    - mse as loss function
+    
+ Results: TBD.
+
 
