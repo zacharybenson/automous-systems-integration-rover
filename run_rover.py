@@ -14,6 +14,7 @@ rov_steering_val = None
 rov_throttle_val = None
 MODEL = '/home/usafa/Desktop/automous-systems-integration-rover-main/model/model2023_04_05_19_49_26.h5'
 
+
 def connect_device(s_connection, b=115200, num_attempts=10):
     print("Connecting to device...")
     device = None
@@ -33,28 +34,50 @@ def connect_device(s_connection, b=115200, num_attempts=10):
 
     return device
 
+
 def apply_mask(color_frame):
-    low_white = (150,150,150)
-    high_white = (255,255,255)
-# Threshold the HSV image to get only white colors
-    mask = cv2.inRange(color_frame,low_white, high_white)
+    low_white = (150, 150, 150)
+    high_white = (255, 255, 255)
+    # Threshold the HSV image to get only white colors
+    mask = cv2.inRange(color_frame, low_white, high_white)
     # Bitwise-AND mask and original image
     return mask
 
+
 def process_image(frames):
-
-
     color_frame = cv2.resize(frames, (160, 120))
     image = apply_mask(color_frame)
     height, width = image.shape
-    image = image[int(width / 3):width,int(height / 2):height]
+    image = image[int(width / 3):width, int(height / 2):height]
+    kernel = get_gaussian_matrix(image.shape[0], image.shape[1], h_stdev=.15, w_stdev=.15)
+    weighted_image = weight_image(image=image,kernel=kernel)
+    image_arr = np.stack((image, weighted_image), axis=2)
 
-    return image
+    return image_arr
+
+def get_gaussian_matrix(h, w, h_stdev=.15, w_stdev=.15):
+    '''returns a 2D gaussian matrix with '''
+
+    # See: https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.gaussian.html
+    k1d = signal.gaussian(h, std=h_stdev * h).reshape(h, 1)
+    k2d = signal.gaussian(w, std=w_stdev * w).reshape(w, 1)
+
+    # Note: The inner product (or dot product) of 2 vectors uT*v would result in a matrix
+    #          the size of the outer dimensions of the 2 vectors (i.e., a scalar)
+
+    #       However, the outer product of 2 nxm vectors u*vT would result in a
+    #         matrix the size of nxm.
+    kernel = np.outer(k1d, k2d)
+    # plot_matrix(kernel, "Kernel", False)
+
+    return kernel
+
+def weight_image(image, coef=1000, kernel):
+    weighted_img = image * kernel
+    return weighted_img
 
 def inference(samples, model):
     # File path
-
-
     # Convert into Numpy array
 
     # Generate predictions for samples
@@ -79,14 +102,12 @@ def get_rover_data(device):
 
     return [ster, thr]
 
+
 def percent_difference(old, new):
-    return abs(old - new)/((old + new)/2) * 100
+    return abs(old - new) / ((old + new) / 2) * 100
 
 
-def run(pipeline, config, device,model):
-
-
-
+def run(pipeline, config, device, model):
     try:
         logging.info("Configuring depth stream.")
         config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
@@ -99,8 +120,8 @@ def run(pipeline, config, device,model):
 
         logging.info("Realsense sensor stream..")
         colorizer = rs.colorizer()
-        while device.armed:
 
+        while device.armed:
             frames = pipeline.wait_for_frames()
             align_to = rs.stream.color
             alignedFs = rs.align(align_to)
@@ -114,14 +135,16 @@ def run(pipeline, config, device,model):
             image_arr = process_image(color_frame)
 
             logging.info("Getting predictions model..")
+
             image_arr = np.expand_dims(image_arr, 0)
+
             new_ster, new_thr = inference(image_arr, model)
-            print([new_thr,new_ster])
+
+            print([new_thr, new_ster])
             device.channels.overrides = {'1': int(new_ster), '3': int(new_thr)}
 
     finally:
         print("finish")
-
 
 
 def main():
@@ -146,7 +169,7 @@ def main():
             time.sleep(1)
 
         print("Rover Armed... The machines are taking over...")
-        run(pipeline, configuration, rover,model)
+        run(pipeline, configuration, rover, model)
 
 
 if __name__ == "__main__":

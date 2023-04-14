@@ -34,6 +34,7 @@ def initialize_training_settings(use_weighted):
 # checkpointing
 CHECK_POINT_FILEPATH = '/home/usafa/Documents/GitHub/automous-systems-integration-rover/model/'
 DEFAULT_DATA_PATH = '/media/usafa/ext_data/data'
+MODEL_RELOAD = ''
 session__id = str(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))
 
 
@@ -131,8 +132,7 @@ def train_harness():
     continue_train = False
 
     if continue_train:
-        model = load_keras_model_direct(
-            '/Users/zacharybenson/Documents/github/automous-systems-integration-rover/model/model2023_04_05_16_03_49.h5')
+        model = load_keras_model_direct(MODEL_RELOAD)
     # evaluate model
     else:
         model = define_model()
