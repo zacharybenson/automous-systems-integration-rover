@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
 import cv2
+from scipy import signal
 
 
 class CustomDataGen(tf.keras.utils.Sequence):
@@ -15,7 +16,9 @@ class CustomDataGen(tf.keras.utils.Sequence):
                  use_sequence,
                  sequence_size,
                  input_size,
-                 batch_size):
+                 batch_size,
+                 use_weighted,
+                 ):
 
         self.use_sequence = use_sequence
         self.DEFAULT_DATA_PATH = DEFAULT_DATA_PATH
@@ -26,6 +29,8 @@ class CustomDataGen(tf.keras.utils.Sequence):
         self.batch_size = batch_size
         self.batches = ''
         self.sequences = ''
+        self.use_weighted = use_weighted
+        self.weighted_kernel = self.get_gaussian_matrix(h=self.input_size[0], w=self.input_size[1])
 
     # This will create batch based on sequences:
 
@@ -59,31 +64,43 @@ class CustomDataGen(tf.keras.utils.Sequence):
         lower_white = np.array([0, 0, 255 - sensitivity])
         upper_white = np.array([255, sensitivity, 255])
         mask = cv2.inRange(hsv, lower_white, upper_white)
-        white_range = cv2.bitwise_and(image, image, mask=mask)
 
-        return white_range
+        return mask
 
-    def crop_image(self, image):
-        width, height = image.size
+    def get_gaussian_matrix(self, h, w, h_stdev=.15, w_stdev=.15):
+        '''returns a 2D gaussian matrix with '''
 
-        # Setting the points for cropped image
-        left = width / 3
-        right = width
+        # See: https://docs.scipy.org/doc/scipy-0.14.0/reference/generated/scipy.signal.gaussian.html
+        k1d = signal.gaussian(h, std=h_stdev * h).reshape(h, 1)
+        k2d = signal.gaussian(w, std=w_stdev * w).reshape(w, 1)
 
-        top = height / 2
-        bottom = height
+        # Note: The inner product (or dot product) of 2 vectors uT*v would result in a matrix
+        #          the size of the outer dimensions of the 2 vectors (i.e., a scalar)
 
-        # Cropped image of above dimension
-        # (It will not change original image)
-        image_cropped = image.crop((left, top, right, bottom))
+        #       However, the outer product of 2 nxm vectors u*vT would result in a
+        #         matrix the size of nxm.
+        kernel = np.outer(k1d, k2d)
+        # plot_matrix(kernel, "Kernel", False)
 
-        return image_cropped
+        return kernel
+
+    def weight_image(self, image, coef=1000):
+        weighted_img = image * self.weighted_kernel
+        return weighted_img
 
     def __get_input(self, samples, target_size):
         # for sample in samples:
         for sample in samples:
             image = cv2.imread(sample, cv2.IMREAD_GRAYSCALE)
-            return image / 255
+            image = cv2.resize(image, (160, 120))
+            height, width = image.shape
+            image = image[int(width / 3):width, int(height / 2):height]
+
+            if self.use_weighted:
+                # this creates a two channel image
+                weighted_image = self.weight_image(image)
+                image = np.stack((image, weighted_image), axis=2)
+            return image
 
     def __get_output(self, samples):
         path = samples[0]
@@ -140,3 +157,5 @@ def create_list_of_data(path, ends_with):
     df.columns = cols
 
     return df
+
+

@@ -1,41 +1,61 @@
 # baseline cnn model for mnist
 import datetime
+import os
+
 import matplotlib.pyplot as plt
-import numpy as np
 import tensorflow as tf
 from keras.optimizers import adam_v2
 from sklearn.model_selection import train_test_split
 from tensorflow.keras import layers
 from tensorflow.keras.callbacks import EarlyStopping
 # callbacks
-from tensorflow.keras.callbacks import LearningRateScheduler
 from tensorflow.keras.callbacks import ModelCheckpoint
 # Custom datagen
 from data_gen import create_list_of_data, CustomDataGen
 
-INPUT_SIZE = [160, 107]
+INPUT_SIZE = ''
+CHANNELS = ''
+USE_WEIGHTED =''
+
+#Set these before training
+
+def initialize_training_settings(use_weighted):
+    global USE_WEIGHTED
+    global CHANNELS
+    global INPUT_SIZE
+    USE_WEIGHTED = use_weighted
+    INPUT_SIZE = [67, 60]
+    if use_weighted:
+        CHANNELS = 2
+    else:
+        CHANNELS = 1
+
+
 # checkpointing
-CHECK_POINT_FILEPATH = '/Users/zacharybenson/Documents/github/automous-systems-integration-rover/model/'
-DEFAULT_DATA_PATH = "/Users/zacharybenson/Desktop/w/"
+CHECK_POINT_FILEPATH = '/home/usafa/Documents/GitHub/automous-systems-integration-rover/model/'
+DEFAULT_DATA_PATH = '/media/usafa/ext_data/data'
 session__id = str(datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S'))
 
 
 def define_model():
-    inputs = tf.keras.Input(shape=(INPUT_SIZE[0], INPUT_SIZE[1], 1))
+    global INPUT_SIZE
+    global CHANNELS
+    inputs = tf.keras.Input(shape=(INPUT_SIZE[0], INPUT_SIZE[1], CHANNELS))
 
     x = layers.Conv2D(filters=16,
                       kernel_size=3,
                       activation="relu",
-                      kernel_initializer="truncated_normal")(inputs)
+                      kernel_initializer="truncated_normal",padding='same')(inputs)
     x = layers.Conv2D(filters=16,
                       kernel_size=3,
                       activation="relu",
-                      kernel_initializer="truncated_normal")(x)
+                      kernel_initializer="truncated_normal",padding='same')(x)
     x = layers.Conv2D(filters=16,
                       kernel_size=3,
                       activation="relu",
-                      kernel_initializer="truncated_normal")(x)
+                      kernel_initializer="truncated_normal",padding='same')(x)
     x = layers.Flatten()(x)
+    x = layers.Dense(1024, kernel_initializer="truncated_normal")(x)
     x = layers.Dense(512, kernel_initializer="truncated_normal")(x)
     x = layers.Dense(256, kernel_initializer="truncated_normal")(x)
     x = layers.Dense(64, kernel_initializer="truncated_normal")(x)
@@ -58,26 +78,22 @@ model_checkpoint_callback = ModelCheckpoint(
     mode='min',
     save_best_only=True)
 
-callbacks = [model_early_stoping_callback,
-             model_checkpoint_callback],
+callbacks = [model_checkpoint_callback]
 
 
 # ------ Callbacks ------
 
 # evaluate a model using k-fold cross-validation
 def train(train_generator, test_generator, model, callback_list):
-    scores, histories = list(), list()
+    histories = list()
     # fit model
     with tf.device('/GPU:0'):
         history = model.fit(train_generator,
-                            epochs=10, batch_size=32,
+                            epochs=100, batch_size=32,
                             validation_data=test_generator,
                             callbacks=callback_list,
                             verbose=1, shuffle=True)
-        # evaluate model
-        # _, score = model.evaluate(test_generator, verbose=1)
-        # print('> %.3f' % (score * 100.0))
-        # stores scores
+
         model.save(CHECK_POINT_FILEPATH)
     return history
     # return score, history
@@ -88,7 +104,7 @@ def plot_loss(histories):
     loss = histories.history["loss"]
     val_loss = histories.history["val_loss"]
     epochs = range(1, len(loss) + 1)
-    plt.plot(epochs, loss, "bo", label="Training loss")
+    plt.plot(epochs, loss, "b", label="Training loss")
     plt.plot(epochs, val_loss, "b", label="Validation loss")
     plt.title("Training and validation loss")
     plt.xlabel("Epochs")
@@ -109,8 +125,8 @@ def train_harness():
     # load dataset
     df = create_list_of_data(DEFAULT_DATA_PATH, "_w")
     training, test = train_test_split(df, test_size=0.2)
-    training_generator = CustomDataGen(DEFAULT_DATA_PATH, training, True, 5, INPUT_SIZE, 32)
-    test_generator = CustomDataGen(DEFAULT_DATA_PATH, test, True, 5, INPUT_SIZE, 32)
+    training_generator = CustomDataGen(DEFAULT_DATA_PATH, training, True, 5, INPUT_SIZE, 32,use_weighted=USE_WEIGHTED)
+    test_generator = CustomDataGen(DEFAULT_DATA_PATH, test, True, 5, INPUT_SIZE, 32, use_weighted=USE_WEIGHTED)
 
     continue_train = False
 
@@ -126,6 +142,7 @@ def train_harness():
 
 
 if __name__ == '__main__':
+    initialize_training_settings(use_weighted=True)
     train_harness()
 
 # See PyCharm help at https://www.jetbrains.com/help/pycharm/
