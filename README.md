@@ -1,146 +1,101 @@
- ---
+# Autonomous Rover — Behavioral Cloning for Line-Following Navigation
 
-<div align="center">    
- 
-# Behavior Cloning :arrows_clockwise: with Rovers :red_car:
- 
-</div>
+**CNN-based imitation learning system for autonomous track navigation | USAFA Autonomous Systems Integration**
 
-<div align="left">
+![Python](https://img.shields.io/badge/Python-3.x-blue?logo=python&logoColor=white)
+![TensorFlow](https://img.shields.io/badge/TensorFlow-Keras-FF6F00?logo=tensorflow&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OpenCV-Computer%20Vision-5C3EE8?logo=opencv&logoColor=white)
 
-We’re going to attempt to teach a robotic rover how to use a line as a guide for driving around a race track.  This problem will be solved using a single sensor – a simple RGB camera.  All of the control will be derived from a single image, a single frame from streamed video that represents a snapshot in time. This poses both a challenge and a great opportunity for applied machine learning.  As discussed, we will approach this problem by applying a technique called behavioral cloning – a subset under a larger group of techniques called imitation learning (IL). <br>
+## Overview
 
-In general, at the heart of IL is a Markov Decision Process (MDP) where we have a set of states S, a set of actions A, and a P(s’|s,a) transition model (the probability that an action a in the state s leads to s’).  This may or may not be associated with an unknown reward function, R(s,a).  For now, there will be no R function.  If you’re thinking to yourself that this more or less resembles reinforcement learning (RL), then you’d be correct; however, our rovers will attempt to learn an expert’s optimal policy π* through a simple supervised learning approach. <br>
+End-to-end behavioral cloning system that teaches a physical skid-steer rover to follow a line track using only RGB camera input. A convolutional neural network learns the mapping from camera frames to steering and throttle commands by imitating expert-driven demonstrations. Built as an autonomous systems integration project at the United States Air Force Academy.
 
-## Description of the Problem
-The environment consists of the following: (1) State s ' S is represented by an observation through our video camera (i.e. a frame/image), along with any other data you might find useful.  Our camera has a resolution of 640x480 with 3 8-bit (RGB) color channels.  (2) A deceptively simple action space, that allows for a throttle amount and a steering amount (remember, this is a skid steer system).  The goal is to perform n laps around a track defined by colored material (some sort of matte tape) laid out in an arbitrary line pattern in the fastest time possible. Ideally, our model will generalize to drive around any shape of track. <br>
+## System Architecture
 
+```
+Intel RealSense Camera (640x480 RGB)
+        │
+        ▼
+Image Processing (OpenCV)
+  - Resize to 160x120
+  - White-pixel mask extraction
+  - Crop to region of interest (67x60)
+  - Gaussian-weighted attention overlay
+        │
+        ▼
+CNN Model (TensorFlow/Keras)
+  - 3x Conv2D (16 filters each)
+  - Dense layers: 1024 → 512 → 256 → 64 → 2
+  - Output: [steering, throttle]
+        │
+        ▼
+DroneKit MAVLink Interface
+  - RC channel overrides → physical rover
+```
 
-## Artifacts
-### 2 - Models :link:
-### 3 - Data Repo :link:
-### 4 - Experiment Logs :link:
+**Data collection**: Expert drives the rover around a taped track while the system records camera frames paired with steering/throttle telemetry. Frames are masked and indexed, then stored alongside pickled telemetry arrays.
 
-4.a Data Collection <br>
-- Collected 35 minutes of data of the rover driving the track.
-- Captured in this data was the video, throttle, and steering values for the rover.
-    - The throttle data was later found to be incorrect, as its value is based on a relative throttle position. As such the rover throttle values, if the throttle was initialized at base line would move the rover in reverse. <br> this was addessed later on in the pipeline.
-- The video data was save to bag file.
-- The steering and throttle data were pickled.
-  4.b Data Processing <br>
-- Data processing was conducted in two phases: 1. After collection, and immediately before training.
-    - After collection:
-        - The video data was split into indexed individual frames.
-        - A bit mask was then applied to the image to highlight the track.
-        - These index frames were then matched with their telemetry <br> data that was reloaded from the pickle file as a numpy array.
-        - Lastly some images during collection were corrupted, these were removed using a script <br>
-          prior to being added to the data set.
-- Before training:
-    - The images were resized to fit the specific dimensions needed for the model. This was <br>
-      accomplished by creating a custom data generator.
-    - Also included in the data generator was the option to create sequences of data.
+**Training**: Custom data generator feeds cropped, masked frames (with optional Gaussian-weighted channel) into the CNN. Trained with MSE loss, Adam optimizer, and early stopping on validation loss.
 
-### 4.c Model Creation <br>
-To create my models I conducted three primary experiments.
+**Inference**: Real-time loop captures RealSense frames, processes through the trained model, and writes predicted steering/throttle values to the rover via DroneKit RC channel overrides.
 
-#### Experiment 1
-- Experiment 1 Specs:
-    - Input size 28 x 28
-    - 3 Convulutional layers
-    - 3 Drop out layers
-    - 3 max pooling layers
-    - Initialized with truncated normal
-    - Batch normalization
-    - mse as loss function
+## Tech Stack
 
-- Results: Model carried a high training loss throughout the training, but continued to be minimized.
-  Validation loss quickly decreased and then remained stagnant for the remainder of the epochs.
-  It was clear that this model was overfitting.
-    - To verify these results, I ran an inference on one batch of the training data, and found that the throttle and steering outputs were close to the labels.
-    - When this model was used on the rover it became clear that there was an issue with the data. The rover was only moving backwards. It was found that this was because the throttle values that were recorded were relative to where the throttle was set when it was turned on. Since it was not at true zero during data collection, the throttle inputs all read to be moving the rover in the reverse direction. This was addressed for the next iteration.
+- **Python 3.x**
+- **TensorFlow / Keras** — CNN model definition and training
+- **OpenCV** — image processing, masking, and frame capture
+- **DroneKit** — MAVLink communication with the rover autopilot
+- **Intel RealSense SDK** (`pyrealsense2`) — depth and color camera streams
+- **NumPy / SciPy** — data processing and Gaussian kernel generation
 
-#### Experiment 2
-- Experiment 2 Specs:
-    - Input size 256 x 256
-    - 3 Convolutional layers
-    - 3 Drop out layers
-    - 3 max pooling layers
-    - Initialized with truncated normal
-    - Batch normalization
-    - mse as loss function
+## Project Structure
 
-- Results: Model carried a high training loss throughout the training, but continued to be minimized.
-  Validation loss quickly decreased and then remained stagnant for the remainder of the epochs.
-  It was clear that this model was overfitting.
-    - Due to time constraints this was tested on the rover.
+| Path | Description |
+|---|---|
+| `run_rover.py` | Main inference loop — camera → model → rover control |
+| `training/training.py` | Model definition and training harness |
+| `training/data_gen.py` | Custom data generator with sequencing support |
+| `data_collection/rover_recorder.py` | Records camera frames and telemetry during expert driving |
+| `data_collection/rover_data_processor.py` | Post-collection frame extraction, masking, and labeling |
+| `utilities/drone_lib.py` | DroneKit helper functions |
+| `utilities/realsense_imu.py` | RealSense IMU interface |
+| `model/` | Saved Keras model weights (.h5) |
 
-#### Experiment 3
-- Experiment 3 Specs:
-    - Input size 256 x 256
-    - 4 Convolutional layers
-    - 4 Drop out layers
-    - 4 max pooling layers
-    - Initialized with truncated normal
-    - Batch normalization
-    - mse as loss function
+## Getting Started
 
-- Results: Model carried a high training loss throughout the training, but continued to be minimized.
-  Validation loss quickly decreased and then continued to steadily decrease over the epochs. Although this was true the difference between training, and val loss were quite large; this could be an indication of over fitting.
-    - Due to time constraints this was tested on the rover.
- 
- #### Reworking the Pipeline
- - After the previous three experiments there were indications that the models were not training on all of the data. <br>
- This pointed to an issue that was related to my data generator. After looking deeper it was clear that the data generator <br>
- was not reading all of the information from the directory. 
- - Also discovered in this investigation was that the image were not correctly being processed. Looking deeper I discovered that rather than passing a black and white mask of the image to model, I was passing an image that had had a black and white mask applied to them. This was corrected in the data generator.
- - Additionally after inspecting the image it was clear that the camera angle that was used getting to noise in the form of caputuring the surroundings of the rover rather than the track itself.
-- With these changes I pressed on to a final experiment.
- </div>
+### Hardware
 
-#### Experiment 4
-- Experiment 4 Specs:
-    - Input size 67 x 60
-     - These are cropped images to cut out noise.
-    - 3 Convolutional layers
-    - 512 Dense
-    - 256 Dense
-    - 128 Dense
-    - 64 Dense
-    - 2 Dense
-    - Initialized with truncated normal
-    - Batch normalization
-    - mse as loss function
-    
-- It was clear that I was desimating the information that was being passed to the end of the model. As such I removed the pooling and drop out layers.
-- Results: After training this model, it performed moderately well, being able to find and hold the lines until it was met with turns. This is likely a result of a small training set.
+- Skid-steer rover with MAVLink-compatible autopilot
+- Intel RealSense depth camera
+- Serial connection (`/dev/ttyACM0` at 115200 baud)
 
-### Part 2 - Introducing Un-Supervised Reinforcement Learning
+### Dependencies
 
-In this portion of the project I explored how reinforcement learning could improve the performance of the previous model.
-To do so, I looked for ways to incentivise the rover to find and maintain the line.
-The primary method to do so was to create a weighted image that favored white pixels that are in the center of the image.
-This weighted image was the product of the image array, and a gaussian distrobution array - as such resulting in white cells in the center
-of the image having the most weight. 
+```bash
+pip install tensorflow opencv-python dronekit pyrealsense2 numpy scipy scikit-learn matplotlib
+```
 
-As it pertains to the model, I had a choice on whether this would be the primary image that the model would be trainined on or if it would be <br>
-processed along side the other image.
+### Training
 
-#### Experiment 5
-- Experiment 4 Specs:
-    - Input size 67 x 60
-     - These are cropped images to cut out noise.
-    - Input (67, 60, 2, x)
-     - This is a two channel image that includes the orginal image, and the weighted image.
-    - 3 Convolutional layers
-    - 512 Dense
-    - 256 Dense
-    - 128 Dense
-    - 64 Dense
-    - 2 Dense
-    - Initialized with truncated normal
-    - Batch normalization
-    - mse as loss function
-    
- Results: TBD.
+```bash
+cd training
+python training.py
+```
 
+### Running the Rover
 
+```bash
+python run_rover.py
+```
+
+Arm the rover via radio controller when prompted. The model takes over steering and throttle once armed.
+
+## Context
+
+- Autonomous Systems Integration course project — **United States Air Force Academy**, Spring 2023
+- Explored 5 iterative experiments: CNN architecture tuning, data pipeline debugging, and Gaussian-weighted reinforcement signal integration
+
+## Author
+
+Built by Zachary Benson | Space Force Officer
+[LinkedIn](https://linkedin.com/in/zacharybenson)
